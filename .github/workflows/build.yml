@@ -51,7 +51,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          repository: SagerNet/sing-box
       - name: Setup Go
         uses: actions/setup-go@v4
         with:

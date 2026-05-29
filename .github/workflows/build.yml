@@ -23,12 +23,6 @@ on:
           - tvOS
           - macOS-standalone
           - publish-android
-  push:
-    branches:
-      - stable
-      - testing
-      - unstable
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}-${{ inputs.build }}
   cancel-in-progress: true
@@ -971,6 +965,9 @@ jobs:
     name: Upload builds
     if: "!failure() && github.event_name == 'workflow_dispatch' && (inputs.build == 'All' || inputs.build == 'Binary' || inputs.build == 'Android' || inputs.build == 'Apple' || inputs.build == 'macOS-standalone')"
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
     needs:
       - calculate_version
       - build

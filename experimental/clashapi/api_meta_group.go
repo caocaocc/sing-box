@@ -78,8 +78,10 @@ func getGroupDelay(server *Server) func(w http.ResponseWriter, r *http.Request) 
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(r.Context(), time.Millisecond*time.Duration(timeout))
+		ctx, cancel := context.WithTimeout(server.ctx, time.Millisecond*time.Duration(timeout))
+		stopCancel := context.AfterFunc(r.Context(), cancel)
 		defer cancel()
+		defer stopCancel()
 
 		var result map[string]uint16
 		if urlTestGroup, isURLTestGroup := outboundGroup.(adapter.URLTestGroup); isURLTestGroup {

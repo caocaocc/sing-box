@@ -64,7 +64,7 @@ func (t TrackerMetadata) MarshalJSON() ([]byte, error) {
 	} else {
 		rule = "final"
 	}
-	return json.Marshal(map[string]any{
+	payload := map[string]any{
 		"id": t.ID,
 		"metadata": map[string]any{
 			"network":         t.Metadata.Network,
@@ -83,7 +83,11 @@ func (t TrackerMetadata) MarshalJSON() ([]byte, error) {
 		"chains":      t.Chain,
 		"rule":        rule,
 		"rulePayload": "",
-	})
+	}
+	if !t.ClosedAt.IsZero() {
+		payload["closedAt"] = t.ClosedAt
+	}
+	return json.Marshal(payload)
 }
 
 type Tracker interface {

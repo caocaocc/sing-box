@@ -28,8 +28,14 @@ func connectionRouter(ctx context.Context, network adapter.NetworkManager, traff
 
 func getConnections(ctx context.Context, trafficManager *trafficontrol.Manager) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		state, ok := parseConnectionState(r.URL.Query().Get("state"))
+		if !ok {
+			render.Status(r, http.StatusBadRequest)
+			render.JSON(w, r, ErrBadRequest)
+			return
+		}
 		if r.Header.Get("Upgrade") != "websocket" {
-			snapshot := trafficManager.Snapshot()
+			snapshot := trafficManager.SnapshotForState(state)
 			render.JSON(w, r, snapshot)
 			return
 		}
@@ -56,7 +62,7 @@ func getConnections(ctx context.Context, trafficManager *trafficontrol.Manager) 
 		buf := &bytes.Buffer{}
 		sendSnapshot := func() error {
 			buf.Reset()
-			snapshot := trafficManager.Snapshot()
+			snapshot := trafficManager.SnapshotForState(state)
 			if err := json.NewEncoder(buf).Encode(snapshot); err != nil {
 				return err
 			}
@@ -79,6 +85,19 @@ func getConnections(ctx context.Context, trafficManager *trafficontrol.Manager) 
 				break
 			}
 		}
+	}
+}
+
+func parseConnectionState(raw string) (trafficontrol.ConnectionState, bool) {
+	switch raw {
+	case "", "active":
+		return trafficontrol.ConnectionStateActive, true
+	case "closed":
+		return trafficontrol.ConnectionStateClosed, true
+	case "all":
+		return trafficontrol.ConnectionStateAll, true
+	default:
+		return trafficontrol.ConnectionStateActive, false
 	}
 }
 

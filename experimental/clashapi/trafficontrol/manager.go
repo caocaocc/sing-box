@@ -35,6 +35,14 @@ type ConnectionEvent struct {
 
 const closedConnectionsLimit = 1000
 
+type ConnectionState int
+
+const (
+	ConnectionStateActive ConnectionState = iota
+	ConnectionStateClosed
+	ConnectionStateAll
+)
+
 type Manager struct {
 	uploadTotal   atomic.Int64
 	downloadTotal atomic.Int64
@@ -139,23 +147,39 @@ func (m *Manager) Connection(id uuid.UUID) Tracker {
 }
 
 func (m *Manager) Snapshot() *Snapshot {
+	return m.SnapshotForState(ConnectionStateActive)
+}
+
+func (m *Manager) SnapshotForState(state ConnectionState) *Snapshot {
 	var connections []Tracker
-	m.connections.Range(func(_ uuid.UUID, value Tracker) bool {
-		if value.Metadata().OutboundType != C.TypeDNS {
-			connections = append(connections, value)
+	if state == ConnectionStateActive || state == ConnectionStateAll {
+		m.connections.Range(func(_ uuid.UUID, value Tracker) bool {
+			if value.Metadata().OutboundType != C.TypeDNS {
+				connections = append(connections, value)
+			}
+			return true
+		})
+	}
+
+	var closedConnections []*TrackerMetadata
+	if state == ConnectionStateClosed || state == ConnectionStateAll {
+		for _, metadata := range m.ClosedConnections() {
+			if metadata.OutboundType != C.TypeDNS {
+				closedConnections = append(closedConnections, metadata)
+			}
 		}
-		return true
-	})
+	}
 
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 	m.memory = memStats.StackInuse + memStats.HeapInuse + memStats.HeapIdle - memStats.HeapReleased
 
 	return &Snapshot{
-		Upload:      m.uploadTotal.Load(),
-		Download:    m.downloadTotal.Load(),
-		Connections: connections,
-		Memory:      m.memory,
+		Upload:            m.uploadTotal.Load(),
+		Download:          m.downloadTotal.Load(),
+		Connections:       connections,
+		ClosedConnections: closedConnections,
+		Memory:            m.memory,
 	}
 }
 
@@ -166,17 +190,20 @@ func (m *Manager) Clear() {
 }
 
 type Snapshot struct {
-	Download    int64
-	Upload      int64
-	Connections []Tracker
-	Memory      uint64
+	Download          int64
+	Upload            int64
+	Connections       []Tracker
+	ClosedConnections []*TrackerMetadata
+	Memory            uint64
 }
 
 func (s *Snapshot) MarshalJSON() ([]byte, error) {
+	connections := common.Map(s.Connections, func(t Tracker) *TrackerMetadata { return t.Metadata() })
+	connections = append(connections, s.ClosedConnections...)
 	return json.Marshal(map[string]any{
 		"downloadTotal": s.Download,
 		"uploadTotal":   s.Upload,
-		"connections":   common.Map(s.Connections, func(t Tracker) *TrackerMetadata { return t.Metadata() }),
+		"connections":   connections,
 		"memory":        s.Memory,
 	})
 }

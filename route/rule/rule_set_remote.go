@@ -74,7 +74,10 @@ func (s *RemoteRuleSet) Name() string {
 }
 
 func (s *RemoteRuleSet) String() string {
-	return strings.Join(F.MapToString(s.rules), " ")
+	s.access.RLock()
+	rules := s.rules
+	s.access.RUnlock()
+	return strings.Join(F.MapToString(rules), " ")
 }
 
 func (s *RemoteRuleSet) StartContext(ctx context.Context, startContext *adapter.HTTPStartContext) error {
@@ -99,7 +102,7 @@ func (s *RemoteRuleSet) StartContext(ctx context.Context, startContext *adapter.
 	if s.lastUpdated.IsZero() {
 		err = s.fetch(ctx, true)
 		if err != nil {
-			return E.Cause(err, "initial rule-set: ", s.options.Tag)
+			s.logger.Warn("initial rule-set ", s.options.Tag, " unavailable, will retry in background: ", err)
 		}
 	}
 	s.updateTicker = time.NewTicker(s.updateInterval)
@@ -135,7 +138,9 @@ func (s *RemoteRuleSet) DecRef() {
 
 func (s *RemoteRuleSet) Cleanup() {
 	if s.refs.Load() == 0 {
+		s.access.Lock()
 		s.rules = nil
+		s.access.Unlock()
 	}
 }
 
@@ -217,7 +222,9 @@ func (s *RemoteRuleSet) updateOnce() {
 	if err != nil {
 		s.logger.Error("fetch rule-set ", s.options.Tag, ": ", err)
 	} else if s.refs.Load() == 0 {
+		s.access.Lock()
 		s.rules = nil
+		s.access.Unlock()
 	}
 }
 
@@ -310,7 +317,9 @@ func (s *RemoteRuleSet) resolveTransport() (adapter.HTTPTransport, error) {
 }
 
 func (s *RemoteRuleSet) Close() error {
+	s.access.Lock()
 	s.rules = nil
+	s.access.Unlock()
 	s.cancel()
 	if s.updateTicker != nil {
 		s.updateTicker.Stop()
@@ -328,7 +337,10 @@ func (s *RemoteRuleSet) matchStates(metadata *adapter.InboundContext) ruleMatchS
 
 func (s *RemoteRuleSet) matchStatesWithBase(metadata *adapter.InboundContext, base ruleMatchState) ruleMatchStateSet {
 	var stateSet ruleMatchStateSet
-	for _, rule := range s.rules {
+	s.access.RLock()
+	rules := s.rules
+	s.access.RUnlock()
+	for _, rule := range rules {
 		nestedMetadata := *metadata
 		nestedMetadata.ResetRuleMatchCache()
 		stateSet = stateSet.merge(matchHeadlessRuleStatesWithBase(rule, &nestedMetadata, base))

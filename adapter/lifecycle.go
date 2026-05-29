@@ -68,7 +68,7 @@ func getServiceName(service any) string {
 		return named.Type()
 	}
 	t := reflect.TypeOf(service)
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 	return strings.ToLower(t.Name())
